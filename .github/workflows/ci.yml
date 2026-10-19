@@ -1,0 +1,161 @@
+name: CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [develop, main]
+  pull_request:
+    branches: [develop, main]
+  merge_group:
+    types: [checks_requested]
+
+jobs:
+  javascript:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@1e60f620b9541d7c243d3c69e1a0b6152398c6a1 # v4.0.4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm ci
+        working-directory: example
+      - name: Lint
+        run: npm run lint
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Run Jest tests
+        run: npm test -- --runInBand
+      - name: Build package
+        run: npm run build
+      - name: Validate package contents
+        run: npm pack --dry-run --json --ignore-scripts
+      - name: Run example Jest tests
+        run: npm test -- --runInBand
+        working-directory: example
+      - name: Typecheck example
+        run: npm run typecheck
+        working-directory: example
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@1e60f620b9541d7c243d3c69e1a0b6152398c6a1 # v4.0.4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        with:
+          distribution: zulu
+          java-version: '17'
+      - run: npm ci
+      - run: npm ci
+        working-directory: example
+      - name: Run Android unit tests
+        run: npm run android:test
+      - name: Build example Android app (Release)
+        run: npm run android:build
+      - name: Verify example removes transitive advertising ID permission
+        run: |
+          shopt -s nullglob
+          MERGED_MANIFEST=(app/build/intermediates/merged_manifests/release/*/AndroidManifest.xml)
+          test "${#MERGED_MANIFEST[@]}" -eq 1
+          if grep -q "com.google.android.gms.permission.AD_ID" "${MERGED_MANIFEST[0]}"; then
+            echo "AD_ID remains in the merged Release manifest"
+            exit 1
+          fi
+        working-directory: example/android
+
+  ios:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@1e60f620b9541d7c243d3c69e1a0b6152398c6a1 # v4.0.4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - uses: maxim-lobanov/setup-xcode@60606e260d2fc5762a71e64e74b2174e8ea3c8bd # v1.6.0
+        with:
+          xcode-version: '16.2'
+      - run: npm ci
+      - run: npm ci
+        working-directory: example
+      - name: Run iOS native tests
+        run: npm run ios:test
+      - name: Validate podspec metadata
+        env:
+          LANG: en_US.UTF-8
+          LC_ALL: en_US.UTF-8
+        run: RUBYOPT=-r${{ github.workspace }}/node_modules/react-native/scripts/react_native_pods.rb pod ipc spec SdkDataCloudReactnativePlugin.podspec > /dev/null
+      - name: Install example iOS pods
+        env:
+          LANG: en_US.UTF-8
+          LC_ALL: en_US.UTF-8
+        run: pod install
+        working-directory: example/ios
+      - name: Build example iOS app (Release)
+        run: xcodebuild -workspace DataCloudConsentExample.xcworkspace -scheme DataCloudConsentExample -configuration Release -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
+        working-directory: example/ios
+
+  compatibility-android:
+    name: ${{ matrix.id }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { id: android-0.76.9-legacy, react-native: 0.76.9, architecture: legacy, cli: 15.0.1 }
+          - { id: android-0.76.9-new, react-native: 0.76.9, architecture: new, cli: 15.0.1 }
+          - { id: android-0.81.0-legacy, react-native: 0.81.0, architecture: legacy, cli: 20.1.0 }
+          - { id: android-0.81.0-new, react-native: 0.81.0, architecture: new, cli: 20.1.0 }
+          - { id: android-0.82.1-new, react-native: 0.82.1, architecture: new, cli: 20.1.0 }
+          - { id: android-0.85.1-new, react-native: 0.85.1, architecture: new, cli: 20.1.0 }
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@1e60f620b9541d7c243d3c69e1a0b6152398c6a1 # v4.0.4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        with:
+          distribution: zulu
+          java-version: '17'
+      - run: npm ci
+      - run: npm run compatibility:android
+        env:
+          RN_VERSION: ${{ matrix.react-native }}
+          RN_ARCH: ${{ matrix.architecture }}
+          RN_CLI: ${{ matrix.cli }}
+
+  compatibility-ios:
+    name: ${{ matrix.id }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { id: ios-0.76.9-legacy, react-native: 0.76.9, architecture: legacy, cli: 15.0.1 }
+          - { id: ios-0.76.9-new, react-native: 0.76.9, architecture: new, cli: 15.0.1 }
+          - { id: ios-0.76.9-new-static, react-native: 0.76.9, architecture: new, cli: 15.0.1, frameworks: static }
+          - { id: ios-0.81.0-legacy, react-native: 0.81.0, architecture: legacy, cli: 20.1.0 }
+          - { id: ios-0.81.0-new, react-native: 0.81.0, architecture: new, cli: 20.1.0 }
+          - { id: ios-0.82.1-new, react-native: 0.82.1, architecture: new, cli: 20.1.0 }
+          - { id: ios-0.85.1-new, react-native: 0.85.1, architecture: new, cli: 20.1.0 }
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@1e60f620b9541d7c243d3c69e1a0b6152398c6a1 # v4.0.4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - uses: maxim-lobanov/setup-xcode@60606e260d2fc5762a71e64e74b2174e8ea3c8bd # v1.6.0
+        with:
+          xcode-version: '16.2'
+      - run: npm ci
+      - run: npm run compatibility:ios
+        env:
+          RN_VERSION: ${{ matrix.react-native }}
+          RN_ARCH: ${{ matrix.architecture }}
+          RN_CLI: ${{ matrix.cli }}
+          USE_FRAMEWORKS: ${{ matrix.frameworks }}

@@ -1,0 +1,24 @@
+pluginManagement {
+  includeBuild("../node_modules/@react-native/gradle-plugin")
+  plugins {
+    id "com.android.library" version "8.12.0"
+    id "org.jetbrains.kotlin.android" version "2.1.20"
+  }
+  repositories {
+    gradlePluginPortal()
+    google()
+    mavenCentral()
+  }
+}
+
+dependencyResolutionManagement {
+  repositoriesMode.set(RepositoriesMode.PREFER_PROJECT)
+  repositories {
+    google()
+    mavenCentral()
+    maven { url "https://salesforce-marketingcloud.github.io/MarketingCloudSDK-Android/repository" }
+    maven { url "https://salesforce-marketingcloud.github.io/mobile-sdk-cdp-android/repository" }
+  }
+}
+
+rootProject.name = "react-native-cdp"

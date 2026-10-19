@@ -1,0 +1,56 @@
+plugins {
+  id "com.facebook.react"
+  id "com.android.library"
+  id "org.jetbrains.kotlin.android"
+}
+
+def safeExtGet = { name, fallback ->
+  rootProject.ext.has(name) ? rootProject.ext.get(name) : fallback
+}
+
+android {
+  namespace "com.salesforce.marketingcloud.cdp.reactnative"
+  compileSdk safeExtGet("compileSdkVersion", 36)
+
+  defaultConfig {
+    minSdk safeExtGet("minSdkVersion", 26)
+    targetSdk safeExtGet("targetSdkVersion", 36)
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
+  kotlinOptions { jvmTarget = "17" }
+
+  testOptions {
+    unitTests.returnDefaultValues = true
+  }
+
+}
+
+repositories {
+  google()
+  mavenCentral()
+  maven { url "https://salesforce-marketingcloud.github.io/MarketingCloudSDK-Android/repository" }
+  maven { url "https://salesforce-marketingcloud.github.io/mobile-sdk-cdp-android/repository" }
+}
+
+dependencies {
+  implementation "com.facebook.react:react-android"
+  api "com.salesforce.marketingcloud:cdp:3.0.1"
+
+  testImplementation "junit:junit:4.13.2"
+}
+
+if (rootProject == project) {
+  configurations.configureEach {
+    resolutionStrategy.eachDependency { details ->
+      if (details.requested.group == "com.facebook.react" &&
+          details.requested.name == "react-android" &&
+          !details.requested.version) {
+        details.useVersion("0.85.1")
+      }
+    }
+  }
+}
